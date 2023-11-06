@@ -1,4 +1,4 @@
-# Navigating Change During COVID-19
+# Navigating Change During COVID-19 Backend
 
 ## Intructions
 - Install Node JS from https://nodejs.org/en/download (npm is installed with Node JS).
