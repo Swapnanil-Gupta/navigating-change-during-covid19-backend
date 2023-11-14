@@ -55,7 +55,7 @@ emissionDataRouter.get("/", async (req, res) => {
   }
 });
 
-emissionDataRouter.get("/top-5-sectors", (req, res) => {
+emissionDataRouter.get("/top-5-sectors", async (req, res) => {
   res.json({ message: "top-5-sectors" });
 });
 
