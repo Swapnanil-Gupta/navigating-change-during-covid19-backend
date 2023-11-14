@@ -30,11 +30,14 @@ businessDataRouter.get("/", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
+  const startYear = parseInt(req.query.startYear) || 2012;
+  const endYear = parseInt(req.query.endYear) || 2021;
+
   try {
     const data = await query(
       `
       SELECT 
-        year, 
+        bd.year, 
         s.state_name, 
         i.industry_name, 
         sum(bd.count_establishments) AS count_establishments
@@ -44,11 +47,13 @@ businessDataRouter.get("/", async (req, res) => {
       INNER JOIN ${businessSize} bs ON bs.size_code = bd.size_code
       INNER JOIN ${industry} i ON i.industry_code = bd.industry_code
       WHERE s.state_code = :stateCode
+      AND bd.year >= :startYear
+      AND bd.year <= :endYear
       AND bd.count_establishments IS NOT NULL
-      GROUP BY year, s.state_name, i.industry_name
-      ORDER BY year ASC, s.state_name ASC
+      GROUP BY bd.year, s.state_name, i.industry_name
+      ORDER BY bd.year ASC, s.state_name ASC
     `,
-      { stateCode }
+      { stateCode, startYear, endYear }
     );
 
     const map = new Map();
