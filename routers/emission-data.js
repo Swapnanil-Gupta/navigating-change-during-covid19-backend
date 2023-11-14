@@ -24,6 +24,9 @@ emissionDataRouter.get("/", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
+    const startYear = parseInt(req.query.startYear) || 1970;
+    const endYear = parseInt(req.query.endYear) || 2021;
+
   try {
     const data = await query(
       `
@@ -41,10 +44,12 @@ emissionDataRouter.get("/", async (req, res) => {
         FROM avgEmission
         INNER JOIN ${state} s ON s.state_code=avgEmission.state_code
         INNER JOIN ${energySector} sect ON sect.sector_code=avgEmission.sector_code
-        WHERE s.state_code = :stateCode
+        WHERE s.state_code = :stateCode 
+        AND avgEmission.year >= :startYear
+        AND avgEmission.year <= :endYear
         ORDER BY avgEmission.year ASC, s.state_name ASC
     `,
-      { stateCode }
+    { stateCode, startYear, endYear }
     );
 
     res.json(data);
@@ -55,8 +60,17 @@ emissionDataRouter.get("/", async (req, res) => {
   }
 });
 
+// work on bar graph with top 5 energy sector queries - looks identical to previous
+// query just with new SQL statement to product data
+// find output at localhost:3000/emission-data/top-5-sectors
 emissionDataRouter.get("/top-5-sectors", async (req, res) => {
   res.json({ message: "top-5-sectors" });
 });
 
 module.exports = emissionDataRouter;
+
+
+
+// HOW TO RUN
+// 1. in backend terminal, do 'npm run dev'
+// 2. in browser do, 'localhost:3000/emission-data?stateCode=12&startYear=1970&endYear=2021'
