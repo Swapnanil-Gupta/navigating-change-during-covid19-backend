@@ -4,20 +4,20 @@ const { emissionData, state, fuelType, energySector } = require("../lib/table");
 
 const emissionDataRouter = Router();
 
-// emissionDataRouter.get("/sector", async (req, res) => {
-//   try {
-//     const data = await query(`
-//       SELECT UNIQUE sector_code, sector_name
-//       FROM ${sector}
-//       ORDER BY sector_code ASC
-//     `);
-//     res.json(data);
-//   } catch (err) {
-//     console.error("Failed to fetch sectors");
-//     console.error(err);
-//     res.status(500).json({ error: "Failed to fetch sectors" });
-//   }
-// });
+emissionDataRouter.get("/energy-sector", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE sector_code, sector_name
+      FROM ${energySector}
+      ORDER BY sector_code ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch energy sectors");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch energy sectors" });
+  }
+});
 
 emissionDataRouter.get("/", async (req, res) => {
   const stateCode = parseInt(req.query.stateCode);
