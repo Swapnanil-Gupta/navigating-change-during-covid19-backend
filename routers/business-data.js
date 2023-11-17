@@ -9,7 +9,7 @@ businessDataRouter.get("/industry", async (req, res) => {
     const data = await query(`
       SELECT UNIQUE industry_code, industry_name
       FROM ${industry}
-      ORDER BY industry_code ASC
+      ORDER BY industry_name ASC
     `);
     res.json(data);
   } catch (err) {
@@ -21,72 +21,94 @@ businessDataRouter.get("/industry", async (req, res) => {
 
 businessDataRouter.get("/", async (req, res) => {
   const stateCode = parseInt(req.query.stateCode);
-  if (!stateCode || Number.isNaN(stateCode))
-    return res.status(400).json({ error: "Invalid state code" });
+  if (!stateCode) return res.status(400).json({ error: "Invalid state code" });
 
   const startYear = parseInt(req.query.startYear) || 2010;
   const endYear = parseInt(req.query.endYear) || 2021;
 
+  const excludedIndustries = req.query.excludedIndustries || [];
+  const excludedIndustriesPlaceholder = excludedIndustries
+    .map((_, i) => `:industry${i}`)
+    .join(",");
+  const excludedIndustriesBind = {};
+  excludedIndustries.map(
+    (v, i) => (excludedIndustriesBind[`industry${i}`] = v)
+  );
+
   try {
-    const allCovidData = await query(
-      `
-        SELECT year, sum(count_confirmed_cases) as count_cases
-        FROM ${covidData}
-        WHERE state_code = :stateCode
-        AND year >= :startYear
-        AND year <= :endYear
-        GROUP BY year, state_code
-      `,
-      { stateCode, startYear, endYear }
-    );
-
-    const allIndustries = await query(`
-      SELECT UNIQUE industry_code, industry_name
-      FROM ${industry}
-      ORDER BY industry_code ASC
-    `);
-
-    const allBusinessData = await query(
-      `
-        WITH TotalEstablishments AS (
-          SELECT 
-              year, 
-              state_code,
-              sum(count_establishments) as total_establishments
-          FROM ${businessData}
+    const [allCovidData, allIndustries, allBusinessData] = await Promise.all([
+      query(
+        `
+          SELECT year, sum(count_confirmed_cases) as count_cases
+          FROM ${covidData}
           WHERE state_code = :stateCode
           AND year >= :startYear
           AND year <= :endYear
-          AND count_establishments IS NOT NULL
           GROUP BY year, state_code
-        ), IndustryEstablishments AS (
-          SELECT 
-              bd.year,
-              bd.state_code,
-              i.industry_name,
-              sum(bd.count_establishments) as industry_establishments
-          FROM ${businessData} bd
-          INNER JOIN ${industry} i on i.industry_code = bd.industry_code
-          WHERE bd.state_code = :stateCode
-          AND bd.year >= :startYear
-          AND bd.year <= :endYear
-          AND bd.count_establishments IS NOT NULL
-          GROUP BY bd.year, bd.state_code, i.industry_name
-        )
-        SELECT
-            ie.year,
-            ie.state_code,
-            ie.industry_name,
-            ROUND((ie.industry_establishments / te.total_establishments) * 100, 2) as percent_establishments
-        FROM TotalEstablishments te
-        INNER JOIN 
-            IndustryEstablishments ie 
-            ON ie.year = te.year
-            AND ie.state_code = te.state_code
-        ORDER BY ie.year ASC, ie.state_code ASC, ie.industry_name ASC
-      `,
-      { stateCode, startYear, endYear }
-    );
+        `,
+        { stateCode, startYear, endYear }
+      ),
+      query(
+        `
+          SELECT UNIQUE industry_code, industry_name
+          FROM ${industry}
+          ${
+            excludedIndustries.length != 0
+              ? `WHERE industry_code NOT IN (${excludedIndustriesPlaceholder})`
+              : ""
+          }
+        `,
+        excludedIndustriesBind
+      ),
+      query(
+        `
+          WITH TotalEstablishments AS (
+            SELECT 
+                year, 
+                state_code,
+                sum(count_establishments) as total_establishments
+            FROM ${businessData}
+            WHERE state_code = :stateCode
+            AND year >= :startYear
+            AND year <= :endYear
+            AND count_establishments IS NOT NULL
+            GROUP BY year, state_code
+          ), IndustryEstablishments AS (
+            SELECT 
+                bd.year,
+                bd.state_code,
+                i.industry_name,
+                sum(bd.count_establishments) as industry_establishments
+            FROM ${businessData} bd
+            INNER JOIN ${industry} i on i.industry_code = bd.industry_code
+            WHERE bd.state_code = :stateCode
+            AND bd.year >= :startYear
+            AND bd.year <= :endYear
+            AND bd.count_establishments IS NOT NULL
+            ${
+              excludedIndustries.length != 0
+                ? `AND bd.industry_code NOT IN (${excludedIndustriesPlaceholder})`
+                : ""
+            }
+            GROUP BY bd.year, bd.state_code, i.industry_name
+          )
+          SELECT
+              ie.year,
+              ie.state_code,
+              ie.industry_name,
+              ROUND((ie.industry_establishments / te.total_establishments) * 100, 2) as percent_establishments
+          FROM TotalEstablishments te
+          INNER JOIN 
+              IndustryEstablishments ie 
+              ON ie.year = te.year
+              AND ie.state_code = te.state_code
+          ORDER BY ie.year ASC, ie.state_code ASC, ie.industry_name ASC
+        `,
+        excludedIndustries.length == 0
+          ? { stateCode, startYear, endYear }
+          : { stateCode, startYear, endYear, ...excludedIndustriesBind }
+      ),
+    ]);
 
     if (allBusinessData.length == 0) {
       return res.status(404).json({ error: "No data found for the state" });
