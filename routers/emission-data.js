@@ -89,15 +89,14 @@ emissionDataRouter.get("/top-5-sectors", async (req, res) => {
         GROUP BY emis.year, emis.sector_code, emis.state_code
         ORDER BY emis.year ASC, emis.state_code ASC
       )
-      SELECT avgEmission.year, s.state_name, sect.sector_name, MAX(avgEmission.avg_emission) as max_avg_emission
+      SELECT sect.sector_name, SUM(avgEmission.avg_emission) as total_avg_emission
       FROM avgEmission
       INNER JOIN ${state} s ON s.state_code=avgEmission.state_code
       INNER JOIN ${energySector} sect ON sect.sector_code=avgEmission.sector_code
       WHERE s.state_code = :stateCode 
       AND avgEmission.year >= :startYear
       AND avgEmission.year <= :endYear
-      GROUP BY avgEmission.year, s.state_name, sect.sector_name
-      ORDER BY avgEmission.year ASC, s.state_name ASC
+      GROUP BY sect.sector_name
       `,
     { stateCode, startYear, endYear }
     );
