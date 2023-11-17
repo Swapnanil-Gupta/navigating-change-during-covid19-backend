@@ -1,12 +1,6 @@
 const { Router } = require("express");
 const { query } = require("../lib/db");
-const {
-  businessData,
-  state,
-  businessSize,
-  businessType,
-  industry,
-} = require("../lib/table");
+const { businessData, industry, covidData } = require("../lib/table");
 
 const businessDataRouter = Router();
 
@@ -30,33 +24,66 @@ businessDataRouter.get("/", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
-  const startYear = parseInt(req.query.startYear) || 2012;
+  const startYear = parseInt(req.query.startYear) || 2010;
   const endYear = parseInt(req.query.endYear) || 2021;
 
   try {
+    const allCovidData = await query(
+      `
+        SELECT year, sum(count_confirmed_cases) as count_cases
+        FROM ${covidData}
+        WHERE state_code = :stateCode
+        AND year >= :startYear
+        AND year <= :endYear
+        GROUP BY year, state_code
+      `,
+      { stateCode, startYear, endYear }
+    );
+
     const allIndustries = await query(`
       SELECT UNIQUE industry_code, industry_name
       FROM ${industry}
       ORDER BY industry_code ASC
     `);
-    const allIndustryNames = allIndustries.map((i) => i.industryName);
+
     const allBusinessData = await query(
       `
-        SELECT 
-          bd.year,
-          i.industry_name, 
-          sum(bd.count_establishments) AS count_establishments
-        FROM ${businessData} bd
-        INNER JOIN ${state} s ON s.state_code = bd.state_code
-        INNER JOIN ${businessType} bt ON bd.type_code = bt.type_code
-        INNER JOIN ${businessSize} bs ON bs.size_code = bd.size_code
-        INNER JOIN ${industry} i ON i.industry_code = bd.industry_code
-        WHERE s.state_code = :stateCode
-        AND bd.year >= :startYear
-        AND bd.year <= :endYear
-        AND bd.count_establishments IS NOT NULL
-        GROUP BY bd.year, s.state_name, i.industry_name
-        ORDER BY bd.year ASC, s.state_name ASC
+        WITH TotalEstablishments AS (
+          SELECT 
+              year, 
+              state_code,
+              sum(count_establishments) as total_establishments
+          FROM ${businessData}
+          WHERE state_code = :stateCode
+          AND year >= :startYear
+          AND year <= :endYear
+          AND count_establishments IS NOT NULL
+          GROUP BY year, state_code
+        ), IndustryEstablishments AS (
+          SELECT 
+              bd.year,
+              bd.state_code,
+              i.industry_name,
+              sum(bd.count_establishments) as industry_establishments
+          FROM ${businessData} bd
+          INNER JOIN ${industry} i on i.industry_code = bd.industry_code
+          WHERE bd.state_code = :stateCode
+          AND bd.year >= :startYear
+          AND bd.year <= :endYear
+          AND bd.count_establishments IS NOT NULL
+          GROUP BY bd.year, bd.state_code, i.industry_name
+        )
+        SELECT
+            ie.year,
+            ie.state_code,
+            ie.industry_name,
+            ROUND((ie.industry_establishments / te.total_establishments) * 100, 2) as percent_establishments
+        FROM TotalEstablishments te
+        INNER JOIN 
+            IndustryEstablishments ie 
+            ON ie.year = te.year
+            AND ie.state_code = te.state_code
+        ORDER BY ie.year ASC, ie.state_code ASC, ie.industry_name ASC
       `,
       { stateCode, startYear, endYear }
     );
@@ -65,24 +92,36 @@ businessDataRouter.get("/", async (req, res) => {
       return res.status(404).json({ error: "No data found for the state" });
     }
 
-    const map = new Map();
+    const allIndustryNames = allIndustries.map((i) => i.industryName);
+
+    const covidDataMap = new Map();
+    for (let row of allCovidData) {
+      const { year, countCases } = row;
+      covidDataMap.set(year, countCases);
+    }
+
+    const businessDataMap = new Map();
     for (let row of allBusinessData) {
-      const { year, industryName, countEstablishments } = row;
-      if (map.has(year)) {
-        map.get(year)[industryName] = countEstablishments;
+      const { year, industryName, percentEstablishments } = row;
+      if (businessDataMap.has(year)) {
+        businessDataMap.get(year)[industryName] = percentEstablishments;
       } else {
         let obj = {};
         for (let name of allIndustryNames) {
           obj[name] = 0;
         }
-        obj[industryName] = countEstablishments;
-        map.set(year, obj);
+        obj[industryName] = percentEstablishments;
+        businessDataMap.set(year, obj);
       }
     }
 
-    let payload = [["Year", ...allIndustryNames]];
-    for (let key of map.keys()) {
-      payload.push([key, ...Object.values(map.get(key))]);
+    let payload = [["Year", "Confirmed COVID-19 Cases", ...allIndustryNames]];
+    for (let year of businessDataMap.keys()) {
+      payload.push([
+        year,
+        covidDataMap.has(year) ? covidDataMap.get(year) : 0,
+        ...Object.values(businessDataMap.get(year)),
+      ]);
     }
     res.json(payload);
   } catch (err) {
