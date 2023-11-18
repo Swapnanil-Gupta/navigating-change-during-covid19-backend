@@ -34,26 +34,49 @@ emissionDataRouter.get("/", async (req, res) => {
 
   try {
     const data = await query(
-      `
-        WITH avgEmission(year,sector_code,state_code,avg_emission) AS (
-            SELECT emis.year, emis.sector_code, emis.state_code, AVG(emis.emission) as avg_emission
-            FROM ${emissionData} emis
-            INNER JOIN ${state} s ON s.state_code = emis.state_code
-            INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
-            INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
-            WHERE emis.emission IS NOT NULL
-            GROUP BY emis.year, emis.sector_code, emis.state_code
-            ORDER BY emis.year ASC, emis.state_code ASC
-        )
-        SELECT avgEmission.year, s.state_name, sect.sector_name, avgEmission.avg_emission
-        FROM avgEmission
-        INNER JOIN ${state} s ON s.state_code=avgEmission.state_code
-        INNER JOIN ${energySector} sect ON sect.sector_code=avgEmission.sector_code
+        `WITH avg_sector_emission(year,sector_code,state_code,avg_emission) AS (
+          SELECT emis.year, emis.sector_code, emis.state_code, AVG(emis.emission) as avg_emission
+          FROM ${emissionData} emis
+          INNER JOIN ${state} s ON s.state_code = emis.state_code
+          INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
+          INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
+          WHERE emis.emission IS NOT NULL
+          GROUP BY emis.year, emis.sector_code, emis.state_code
+          ORDER BY emis.year ASC, emis.state_code ASC
+          ),
+          total_yearly_state_emission(year, state_code, total_emission) AS (
+          SELECT emis.year, emis.state_code, SUM(emis.emission) as total_emis_per_year
+          FROM ${emissionData} emis
+          INNER JOIN ${state} s ON s.state_code = emis.state_code
+          INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
+          INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
+          WHERE emis.emission IS NOT NULL
+          AND ft.fuel_type_code != 400
+          GROUP BY emis.year, emis.state_code
+          ORDER BY emis.year ASC, emis.state_code ASC
+          ),
+          total_year_sector_emission(year, state_code, sector_code, total_emission) AS (
+          SELECT emis.year, emis.state_code, sect.sector_code, SUM(emis.emission) as total_emis_per_year
+          FROM ${emissionData} emis
+          INNER JOIN ${state} s ON s.state_code = emis.state_code
+          INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
+          INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
+          WHERE emis.emission IS NOT NULL
+          AND ft.fuel_type_code != 400
+          GROUP BY emis.year, emis.state_code, sect.sector_code
+          ORDER BY emis.year ASC, emis.state_code ASC
+          )
+        SELECT avgE.year, s.state_name, sect.sector_name, avgE.avg_emission AS avg_sector_emission, (tyse.total_emission/tye.total_emission)*100 AS percent_of_total_emission
+        FROM avg_sector_emission avgE
+        INNER JOIN total_yearly_state_emission tye ON avgE.year=tye.year AND avgE.state_code=tye.state_code
+        INNER JOIN total_year_sector_emission tyse ON avgE.year=tyse.year AND avgE.state_code=tyse.state_code AND avgE.sector_code = tyse.sector_code
+        INNER JOIN ${state} s ON s.state_code=avgE.state_code
+        INNER JOIN ${energySector} sect ON sect.sector_code=avgE.sector_code
         WHERE s.state_code = :stateCode 
-        AND avgEmission.year >= :startYear
-        AND avgEmission.year <= :endYear
-        ORDER BY avgEmission.year ASC, s.state_name ASC
-    `,
+        AND avgE.year >= :startYear
+        AND avgE.year <= :endYear
+        ORDER BY avgE.year ASC, avgE.state_code ASC, avgE.sector_code ASC
+      `,
     { stateCode, startYear, endYear }
     );
 
