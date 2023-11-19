@@ -167,7 +167,7 @@ businessDataRouter.get("/top-5-industries", async (req, res) => {
         SELECT 
             industry_code, 
             SUM(count_establishments) as count_establishments
-        FROM Business_Data
+        FROM ${businessData}
         WHERE state_code = :stateCode
         AND year >= :startYear
         AND year <= :endYear
