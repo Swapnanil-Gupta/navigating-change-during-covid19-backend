@@ -178,7 +178,7 @@ businessDataRouter.get("/top-5-industries", async (req, res) => {
       SELECT 
         m.industry_code, i.industry_name, m.count_establishments
       FROM MaxIndusrty m
-      INNER JOIN Industry i on i.industry_code = m.industry_code
+      INNER JOIN ${industry} i on i.industry_code = m.industry_code
     `,
     { stateCode, startYear, endYear }
   );
