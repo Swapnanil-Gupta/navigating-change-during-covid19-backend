@@ -1,6 +1,12 @@
 const { Router } = require("express");
 const { query } = require("../lib/db");
-const { emissionData, state, fuelType, energySector } = require("../lib/table");
+const {
+  emissionData,
+  state,
+  fuelType,
+  energySector,
+  covidData,
+} = require("../lib/table");
 
 const emissionDataRouter = Router();
 
@@ -21,7 +27,6 @@ emissionDataRouter.get("/energy-sector", async (req, res) => {
   }
 });
 
-
 // Query Data for line graph trends
 // localhost:3000/emission-data?stateCode=12&startYear=1970&endYear=2021
 emissionDataRouter.get("/", async (req, res) => {
@@ -29,11 +34,42 @@ emissionDataRouter.get("/", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
-    const startYear = parseInt(req.query.startYear) || 1970;
-    const endYear = parseInt(req.query.endYear) || 2021;
+  const startYear = parseInt(req.query.startYear) || 1970;
+  const endYear = parseInt(req.query.endYear) || 2021;
+
+  const excludedSectors = req.query.excludedSectors || [];
+  const excludedSectorsPlaceholder = excludedSectors
+    .map((_, i) => `:sector${i}`)
+    .join(",");
+  const excludedSectorsBind = {};
+  excludedSectors.map((v, i) => (excludedSectorsBind[`sector${i}`] = v));
 
   try {
-    const data = await query(
+    const [allCovidData, allSectors, allEmissionsData] = await Promise.all([
+      query(
+        `
+          SELECT year, sum(count_confirmed_cases) as count_cases
+          FROM ${covidData}
+          WHERE state_code = :stateCode
+          AND year >= :startYear
+          AND year <= :endYear
+          GROUP BY year, state_code
+        `,
+        { stateCode, startYear, endYear }
+      ),
+      query(
+        `
+          SELECT UNIQUE sector_code, sector_name
+          FROM ${energySector}
+          ${
+            excludedSectors.length != 0
+              ? `WHERE sector_code NOT IN (${excludedSectorsPlaceholder})`
+              : ""
+          }
+        `,
+        excludedSectorsBind
+      ),
+      query(
         `WITH avg_sector_emission(year,sector_code,state_code,avg_emission) AS (
           SELECT emis.year, emis.sector_code, emis.state_code, AVG(emis.emission) as avg_emission
           FROM ${emissionData} emis
@@ -75,12 +111,55 @@ emissionDataRouter.get("/", async (req, res) => {
         WHERE s.state_code = :stateCode 
         AND avgE.year >= :startYear
         AND avgE.year <= :endYear
+        ${
+          excludedSectors.length != 0
+            ? `AND sect.sector_code NOT IN (${excludedSectorsPlaceholder})`
+            : ""
+        }
         ORDER BY avgE.year ASC, avgE.state_code ASC, avgE.sector_code ASC
       `,
-    { stateCode, startYear, endYear }
-    );
+        excludedSectors.length == 0
+          ? { stateCode, startYear, endYear }
+          : { stateCode, startYear, endYear, ...excludedSectorsBind }
+      ),
+    ]);
 
-    res.json(data);
+    if (allEmissionsData.length == 0) {
+      return res.status(404).json({ error: "No data found for the state" });
+    }
+
+    const allSectorNames = allSectors.map((i) => i.sectorName);
+
+    const covidDataMap = new Map();
+    for (let row of allCovidData) {
+      const { year, countCases } = row;
+      covidDataMap.set(year, countCases);
+    }
+
+    const emissionsDataMap = new Map();
+    for (let row of allEmissionsData) {
+      const { year, sectorName, percentOfTotalEmission } = row;
+      if (emissionsDataMap.has(year)) {
+        emissionsDataMap.get(year)[sectorName] = percentOfTotalEmission;
+      } else {
+        let obj = {};
+        for (let name of allSectorNames) {
+          obj[name] = 0;
+        }
+        obj[sectorName] = percentOfTotalEmission;
+        emissionsDataMap.set(year, obj);
+      }
+    }
+
+    let payload = [["Year", "Confirmed COVID-19 Cases", ...allSectorNames]];
+    for (let year of emissionsDataMap.keys()) {
+      payload.push([
+        year,
+        covidDataMap.has(year) ? covidDataMap.get(year) : 0,
+        ...Object.values(emissionsDataMap.get(year)),
+      ]);
+    }
+    res.json(payload);
   } catch (err) {
     console.error("Failed to fetch emission data");
     console.error(err);
@@ -95,36 +174,51 @@ emissionDataRouter.get("/top-5-sectors", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
-    const startYear = parseInt(req.query.startYear) || 1970;
-    const endYear = parseInt(req.query.endYear) || 2021;
+  const startYear = parseInt(req.query.startYear) || 1970;
+  const endYear = parseInt(req.query.endYear) || 2021;
 
   try {
     const data = await query(
-      
       `
-      WITH avgEmission(year,sector_code,state_code,avg_emission) AS (
-        SELECT emis.year, emis.sector_code, emis.state_code, AVG(emis.emission) as avg_emission
-        FROM ${emissionData} emis
-        INNER JOIN ${state} s ON s.state_code = emis.state_code
-        INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
-        INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
-        WHERE emis.emission IS NOT NULL
-        GROUP BY emis.year, emis.sector_code, emis.state_code
-        ORDER BY emis.year ASC, emis.state_code ASC
-      )
-      SELECT sect.sector_name, SUM(avgEmission.avg_emission) as total_avg_emission
-      FROM avgEmission
-      INNER JOIN ${state} s ON s.state_code=avgEmission.state_code
-      INNER JOIN ${energySector} sect ON sect.sector_code=avgEmission.sector_code
-      WHERE s.state_code = :stateCode 
-      AND avgEmission.year >= :startYear
-      AND avgEmission.year <= :endYear
-      GROUP BY sect.sector_name
+        WITH avgEmission(year,sector_code,state_code,avg_emission) AS (
+          SELECT emis.year, emis.sector_code, emis.state_code, AVG(emis.emission) as avg_emission
+          FROM ${emissionData} emis
+          INNER JOIN ${state} s ON s.state_code = emis.state_code
+          INNER JOIN ${energySector} sect ON emis.sector_code = sect.sector_code
+          INNER JOIN ${fuelType} ft ON ft.fuel_type_code = emis.fuel_type_code
+          WHERE emis.emission IS NOT NULL
+          GROUP BY emis.year, emis.sector_code, emis.state_code
+          ORDER BY emis.year ASC, emis.state_code ASC
+        )
+        SELECT sect.sector_name, SUM(avgEmission.avg_emission) as total_avg_emission
+        FROM avgEmission
+        INNER JOIN ${state} s ON s.state_code=avgEmission.state_code
+        INNER JOIN ${energySector} sect ON sect.sector_code=avgEmission.sector_code
+        WHERE s.state_code = :stateCode 
+        AND avgEmission.year >= :startYear
+        AND avgEmission.year <= :endYear
+        GROUP BY sect.sector_name
+        ORDER BY total_avg_emission DESC
       `,
-    { stateCode, startYear, endYear }
+      { stateCode, startYear, endYear }
     );
 
-    res.json(data);
+    if (data.length == 0) {
+      return res.status(404).json({ error: "No data found for the state" });
+    }
+
+    const map = new Map();
+    for (let row of data) {
+      const { sectorName, totalAvgEmission } = row;
+      map.set(sectorName, totalAvgEmission);
+    }
+
+    const payload = [["Energy Sector", "Total Average Emissions"]];
+    for (let key of map.keys()) {
+      payload.push([key, map.get(key)]);
+    }
+
+    res.json(payload);
   } catch (err) {
     console.error("Failed to fetch emission top-5 bar graph data");
     console.error(err);
