@@ -193,7 +193,7 @@ businessDataRouter.get("/top-5-industries", async (req, res) => {
     map.set(industryName, countEstablishments);
   }
 
-  const payload = [["Industry Name", "Count of Establishments"]];
+  const payload = [["Industry Name", "Total Count of Business Establishments"]];
   for (let key of map.keys()) {
     payload.push([key, map.get(key)]);
   }

@@ -213,7 +213,7 @@ emissionDataRouter.get("/top-5-sectors", async (req, res) => {
       map.set(sectorName, totalAvgEmission);
     }
 
-    const payload = [["Energy Sector", "Total Average Emissions"]];
+    const payload = [["Energy Sector", "Total Average Emissions (PPM)"]];
     for (let key of map.keys()) {
       payload.push([key, map.get(key)]);
     }
