@@ -37,12 +37,12 @@ emissionDataRouter.get("/", async (req, res) => {
   const startYear = parseInt(req.query.startYear) || 1970;
   const endYear = parseInt(req.query.endYear) || 2021;
 
-  const excludedSectors = req.query.excludedSectors || [];
-  const excludedSectorsPlaceholder = excludedSectors
+  const includedSectors = req.query.includedSectors || [];
+  const includedSectorsPlaceholder = includedSectors
     .map((_, i) => `:sector${i}`)
     .join(",");
-  const excludedSectorsBind = {};
-  excludedSectors.map((v, i) => (excludedSectorsBind[`sector${i}`] = v));
+  const includedSectorsBind = {};
+  includedSectors.map((v, i) => (includedSectorsBind[`sector${i}`] = v));
 
   try {
     const [allCovidData, allSectors, allEmissionsData] = await Promise.all([
@@ -62,12 +62,12 @@ emissionDataRouter.get("/", async (req, res) => {
           SELECT UNIQUE sector_code, sector_name
           FROM ${energySector}
           ${
-            excludedSectors.length != 0
-              ? `WHERE sector_code NOT IN (${excludedSectorsPlaceholder})`
+            includedSectors.length != 0
+              ? `WHERE sector_code IN (${includedSectorsPlaceholder})`
               : ""
           }
         `,
-        excludedSectorsBind
+        includedSectorsBind
       ),
       query(
         `WITH avg_sector_emission(year,sector_code,state_code,avg_emission) AS (
@@ -112,15 +112,15 @@ emissionDataRouter.get("/", async (req, res) => {
         AND avgE.year >= :startYear
         AND avgE.year <= :endYear
         ${
-          excludedSectors.length != 0
-            ? `AND sect.sector_code NOT IN (${excludedSectorsPlaceholder})`
+          includedSectors.length != 0
+            ? `AND sect.sector_code IN (${includedSectorsPlaceholder})`
             : ""
         }
         ORDER BY avgE.year ASC, avgE.state_code ASC, avgE.sector_code ASC
       `,
-        excludedSectors.length == 0
+        includedSectors.length == 0
           ? { stateCode, startYear, endYear }
-          : { stateCode, startYear, endYear, ...excludedSectorsBind }
+          : { stateCode, startYear, endYear, ...includedSectorsBind }
       ),
     ]);
 
