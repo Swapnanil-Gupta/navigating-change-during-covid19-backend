@@ -53,6 +53,7 @@ emissionDataRouter.get("/", async (req, res) => {
           WHERE state_code = :stateCode
           AND year >= :startYear
           AND year <= :endYear
+          AND count_confirmed_cases IS NOT NULL
           GROUP BY year, state_code
         `,
         { stateCode, startYear, endYear }
