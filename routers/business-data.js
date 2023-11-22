@@ -26,13 +26,13 @@ businessDataRouter.get("/", async (req, res) => {
   const startYear = parseInt(req.query.startYear) || 2010;
   const endYear = parseInt(req.query.endYear) || 2021;
 
-  const excludedIndustries = req.query.excludedIndustries || [];
-  const excludedIndustriesPlaceholder = excludedIndustries
+  const includedIndustries = req.query.includedIndustries || [];
+  const includedIndustriesPlaceholder = includedIndustries
     .map((_, i) => `:industry${i}`)
     .join(",");
-  const excludedIndustriesBind = {};
-  excludedIndustries.map(
-    (v, i) => (excludedIndustriesBind[`industry${i}`] = v)
+  const includedIndustriesBind = {};
+  includedIndustries.map(
+    (v, i) => (includedIndustriesBind[`industry${i}`] = v)
   );
 
   try {
@@ -53,12 +53,12 @@ businessDataRouter.get("/", async (req, res) => {
           SELECT UNIQUE industry_code, industry_name
           FROM ${industry}
           ${
-            excludedIndustries.length != 0
-              ? `WHERE industry_code NOT IN (${excludedIndustriesPlaceholder})`
+            includedIndustries.length != 0
+              ? `WHERE industry_code IN (${includedIndustriesPlaceholder})`
               : ""
           }
         `,
-        excludedIndustriesBind
+        includedIndustriesBind
       ),
       query(
         `
@@ -86,8 +86,8 @@ businessDataRouter.get("/", async (req, res) => {
             AND bd.year <= :endYear
             AND bd.count_establishments IS NOT NULL
             ${
-              excludedIndustries.length != 0
-                ? `AND bd.industry_code NOT IN (${excludedIndustriesPlaceholder})`
+              includedIndustries.length != 0
+                ? `AND bd.industry_code IN (${includedIndustriesPlaceholder})`
                 : ""
             }
             GROUP BY bd.year, bd.state_code, i.industry_name
@@ -104,9 +104,9 @@ businessDataRouter.get("/", async (req, res) => {
               AND ie.state_code = te.state_code
           ORDER BY ie.year ASC, ie.state_code ASC, ie.industry_name ASC
         `,
-        excludedIndustries.length == 0
+        includedIndustries.length == 0
           ? { stateCode, startYear, endYear }
-          : { stateCode, startYear, endYear, ...excludedIndustriesBind }
+          : { stateCode, startYear, endYear, ...includedIndustriesBind }
       ),
     ]);
 
