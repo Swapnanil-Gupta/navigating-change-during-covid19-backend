@@ -73,4 +73,49 @@ rootRouter.get("/tuples", async (req, res) => {
   res.json(total);
 });
 
+rootRouter.get("/state", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE state_code, state_name
+      FROM ${state}
+      ORDER BY state_name ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch states");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch states" });
+  }
+});
+
+rootRouter.get("/industry", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE industry_code, industry_name
+      FROM ${industry}
+      ORDER BY industry_name ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch industries");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch industries" });
+  }
+});
+
+rootRouter.get("/energy-sector", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE sector_code, sector_name
+      FROM ${energySector}
+      ORDER BY sector_name ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch energy sectors");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch energy sectors" });
+  }
+});
+
 module.exports = rootRouter;
