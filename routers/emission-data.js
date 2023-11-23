@@ -181,9 +181,9 @@ emissionDataRouter.get("/top-sectors", async (req, res) => {
 
     res.json(payload);
   } catch (err) {
-    console.error("Failed to fetch emission top-5 bar graph data");
+    console.error("Failed to fetch top energy sectors");
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch top-5 bar graph data" });
+    res.status(500).json({ error: "Failed to fetch top energy sectors" });
   }
 });
 

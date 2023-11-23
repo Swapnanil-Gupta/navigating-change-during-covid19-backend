@@ -192,9 +192,9 @@ payrollDataRouter.get("/top-industries", async (req, res) => {
 
     res.json(payload);
   } catch (err) {
-    console.error("Failed to fetch top 5 industries");
+    console.error("Failed to fetch top industries");
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch top 5 industries" });
+    res.status(500).json({ error: "Failed to fetch top industries" });
   }
 });
 

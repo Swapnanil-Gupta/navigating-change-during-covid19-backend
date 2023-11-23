@@ -118,4 +118,19 @@ rootRouter.get("/energy-sector", async (req, res) => {
   }
 });
 
+rootRouter.get("/tax-category", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE category_code, category_name
+      FROM ${taxCategory}
+      ORDER BY category_name ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch tax categories");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch tax categories" });
+  }
+});
+
 module.exports = rootRouter;
