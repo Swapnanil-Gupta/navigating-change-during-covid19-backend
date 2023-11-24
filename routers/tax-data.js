@@ -149,8 +149,8 @@ taxDataRouter.get("/top-categories", async (req, res) => {
   if (!stateCode || Number.isNaN(stateCode))
     return res.status(400).json({ error: "Invalid state code" });
 
-  const startYear = parseInt(req.query.startYear) || 2010;
-  const endYear = parseInt(req.query.endYear) || 2021;
+  const startYear = parseInt(req.query.startYear) || 2009;
+  const endYear = parseInt(req.query.endYear) || 2022;
 
   try {
     const topCategoriesData = await query(
@@ -193,8 +193,8 @@ taxDataRouter.get("/top-categories", async (req, res) => {
 });
 
 taxDataRouter.get("/geo", async (req, res) => {
-  const startYear = parseInt(req.query.startYear) || 2010;
-  const endYear = parseInt(req.query.endYear) || 2021;
+  const startYear = parseInt(req.query.startYear) || 2009;
+  const endYear = parseInt(req.query.endYear) || 2022;
 
   try {
     const geoData = await query(

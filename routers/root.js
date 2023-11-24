@@ -88,7 +88,7 @@ rootRouter.get("/state", async (req, res) => {
   }
 });
 
-rootRouter.get("/industry", async (req, res) => {
+rootRouter.get("/business-industry", async (req, res) => {
   try {
     const data = await query(`
       SELECT UNIQUE industry_code, industry_name
@@ -130,6 +130,21 @@ rootRouter.get("/tax-category", async (req, res) => {
     console.error("Failed to fetch tax categories");
     console.error(err);
     res.status(500).json({ error: "Failed to fetch tax categories" });
+  }
+});
+
+rootRouter.get("/business-size", async (req, res) => {
+  try {
+    const data = await query(`
+      SELECT UNIQUE size_code, size_name
+      FROM ${businessSize}
+      ORDER BY size_name ASC
+    `);
+    res.json(data);
+  } catch (err) {
+    console.error("Failed to fetch business sizes");
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch business sizes" });
   }
 });
 
